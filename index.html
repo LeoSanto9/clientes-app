@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Clientes · Escolha Perfeita</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&display=swap');
+  :root{
+    --tinta:#15241B;
+    --tinta-2:#4C5D51;
+    --tinta-3:#7E8E82;
+    --papel:#EDEFEB;
+    --carta:#FFFFFF;
+    --linha:#CFD6C9;
+    --linha-2:#E3E8E0;
+    --verde:#1F7A47;
+    --verde-fraco:#E5F1E8;
+    --ambar:#9C5A15;
+    --ambar-fraco:#F6EADB;
+    --alerta:#A32E2E;
+    --alerta-fraco:#FBEDED;
+    --corpo:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    --titulo:'IBM Plex Serif',Georgia,serif;
+    --raio:4px;
+    --sombra:0 1px 2px rgba(21,36,27,.05);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{background:var(--papel);color:var(--tinta);font-family:var(--corpo);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  button,input,textarea,select{font:inherit;color:inherit}
+  h1,h2,h3{font-family:var(--titulo);font-weight:500;letter-spacing:-.01em;margin:0}
+  .oculto{display:none !important}
+
+  /* ---------- login ---------- */
+  .login-tela{position:fixed;inset:0;background:var(--papel);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+  .login-caixa{background:var(--carta);border:1px solid var(--linha-2);border-radius:6px;padding:34px 30px;width:100%;max-width:340px;text-align:center;box-shadow:var(--sombra)}
+  .login-caixa h1{font-size:21px}
+  .login-caixa .sub{margin:4px 0 24px;color:var(--tinta-3);font-size:13px}
+  .rotulo{font-size:13px;color:var(--tinta-2);display:block;margin:14px 0 5px;font-weight:500;text-align:left}
+  .campo{width:100%;border:1px solid var(--linha);border-radius:var(--raio);background:var(--carta);padding:12px 13px;font-size:16px;min-height:48px}
+  .campo:focus{outline:2px solid var(--verde);outline-offset:1px}
+  textarea.campo{min-height:80px;line-height:1.55;resize:vertical}
+  .login-erro{color:var(--alerta);font-size:13px;margin-top:12px}
+
+  /* ---------- topo ---------- */
+  .topo{position:sticky;top:0;z-index:40;background:var(--carta);border-bottom:1px solid var(--linha-2);
+    display:flex;align-items:center;gap:14px;padding:10px 16px}
+  .topo-marca{display:flex;align-items:center;gap:9px;flex-shrink:0}
+  .topo-marca svg{width:28px;height:28px;flex-shrink:0}
+  .topo-marca b{font-size:14px;font-weight:600;font-family:var(--titulo)}
+  .topo-marca span{display:block;font-size:10px;color:var(--tinta-3)}
+  .topo-titulo{flex:1;min-width:0;font-size:15px;font-weight:500;color:var(--tinta-2)}
+  .topo-acoes{display:flex;gap:8px;flex-shrink:0}
+
+  /* ---------- botões ---------- */
+  .bt{border:1px solid var(--linha);background:var(--carta);color:var(--tinta);border-radius:var(--raio);
+    padding:11px 16px;font-weight:600;font-size:15px;cursor:pointer;min-height:46px;
+    display:inline-flex;align-items:center;gap:8px;justify-content:center}
+  .bt-forte{background:var(--verde);border-color:var(--verde);color:#fff}
+  .bt-escuro{background:var(--papel);border-color:var(--linha);color:var(--tinta-2);padding:8px 13px;min-height:40px;font-size:14px}
+  .bt-perigo{color:var(--alerta);border-color:#E3C7C7;background:var(--alerta-fraco)}
+  .bt-largo{width:100%}
+  .bt:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ---------- quadro geral ---------- */
+  .quadro{max-width:1000px;margin:0 auto;padding:20px 16px 96px}
+  .barra-topo{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
+  .barra-topo .busca{flex:1;min-width:200px}
+  .contagem{font-size:13px;color:var(--tinta-3);margin-bottom:14px}
+
+  /* ---------- cards de cliente ---------- */
+  .cards{display:grid;gap:10px}
+  .card-cli{background:var(--carta);border:1px solid var(--linha-2);border-left:4px solid var(--linha);
+    border-radius:5px;padding:15px 17px;box-shadow:var(--sombra);cursor:pointer;text-align:left}
+  .card-cli.urgente{border-left-color:var(--alerta);background:var(--alerta-fraco)}
+  .card-cli-topo{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .card-cli h3{font-size:16px}
+  .card-cli .imovel{font-size:13.5px;color:var(--tinta-2);margin-top:2px}
+  .card-cli .tel{font-size:12.5px;color:var(--tinta-3);margin-top:2px}
+  .situacoes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  @media(max-width:560px){.situacoes{grid-template-columns:1fr}}
+  .situacao{border:1px solid var(--linha-2);border-radius:4px;padding:9px 11px;background:var(--papel)}
+  .situacao.ok{background:var(--verde-fraco);border-color:#CFE3D5}
+  .situacao.perto,.situacao.vencido{background:var(--alerta-fraco);border-color:#E3C7C7}
+  .situacao .rot{font-size:11.5px;color:var(--tinta-3);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+  .situacao .stt{font-size:13.5px;color:var(--tinta-2);margin-top:3px}
+  .situacao .prz{font-size:12.5px;margin-top:4px;font-weight:600}
+  .situacao.ok .prz{color:var(--verde)}
+  .situacao.perto .prz,.situacao.vencido .prz{color:var(--alerta)}
+  .situacao.sem-data .prz{color:var(--tinta-3);font-weight:400}
+
+  .vazio{text-align:center;padding:50px 20px;color:var(--tinta-2);border:1px dashed var(--linha);border-radius:5px}
+  .vazio h3{margin-bottom:6px}
+  .vazio p{margin:0 0 18px;font-size:14.5px;color:var(--tinta-3)}
+
+  /* ---------- diálogo (novo/editar cliente) ---------- */
+  .dialogo{position:fixed;inset:0;background:rgba(15,24,29,.55);z-index:90;display:flex;align-items:flex-start;
+    justify-content:center;padding:18px;overflow:auto}
+  .dialogo-caixa{background:var(--carta);border-radius:6px;padding:22px;width:100%;max-width:520px;margin:20px 0}
+  .dialogo-caixa h3{font-size:18px;margin-bottom:4px}
+  .grade-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:520px){.grade-2{grid-template-columns:1fr}}
+  .bloco-situacao{border-top:1px solid var(--linha-2);margin-top:16px;padding-top:14px}
+  .bloco-situacao-topo{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .bloco-situacao-topo .campo{flex:1;font-weight:500}
+  .remover-situ{flex-shrink:0;border:1px solid var(--linha);background:var(--carta);color:var(--tinta-3);
+    border-radius:var(--raio);width:40px;height:40px;font-size:16px;cursor:pointer}
+  .remover-situ:hover{border-color:var(--alerta);color:var(--alerta)}
+  .add-situacao{background:none;border:1px dashed var(--linha);color:var(--tinta-2);border-radius:var(--raio);
+    padding:10px;width:100%;font-size:14px;margin-top:14px;cursor:pointer}
+  .add-situacao:hover{border-color:var(--verde);color:var(--verde)}
+  .msg-erro{color:var(--alerta);font-size:13.5px;margin-top:10px}
+  .rodape-dialogo{display:flex;gap:10px;margin-top:20px}
+  .rodape-dialogo .bt{flex:1}
+  .link-apagar{background:none;border:0;color:var(--alerta);font-size:13.5px;padding:0;margin-top:16px;cursor:pointer;text-decoration:underline}
+
+  .carregando{text-align:center;padding:60px 20px;color:var(--tinta-3)}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+
+<div class="login-tela" id="tela-login">
+  <div class="login-caixa">
+    <h1>Clientes</h1>
+    <p class="sub">Escolha Perfeita Negócios Imobiliários</p>
+    <span class="rotulo">E-mail</span>
+    <input class="campo" type="email" id="login-email" autocomplete="username">
+    <span class="rotulo">Senha</span>
+    <input class="campo" type="password" id="login-senha" autocomplete="current-password">
+    <button class="bt bt-forte bt-largo" id="login-entrar" style="margin-top:18px">Entrar</button>
+    <p class="login-erro oculto" id="login-erro">E-mail ou senha não conferem.</p>
+  </div>
+</div>
+
+<div class="topo oculto" id="topo-app">
+  <span class="topo-marca">
+    <svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="30" fill="#1F7A47"/><text x="30" y="38" text-anchor="middle" font-family="IBM Plex Serif" font-size="22" fill="#fff">EP</text></svg>
+    <span><b>Escolha Perfeita</b><span>Clientes</span></span>
+  </span>
+  <span class="topo-titulo">Seguro incêndio &amp; renovação</span>
+  <span class="topo-acoes">
+    <button class="bt-escuro" id="btn-sair">Sair</button>
+  </span>
+</div>
+<div class="quadro oculto" id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  setPersistence, browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+/* mesmo projeto Firebase do Vistoria, coleção própria — sem misturar dados */
+var firebaseConfig = {
+  apiKey: "AIzaSyANnTD8yeXCr8_xjPjGw-wqHt6WG7iSTvo",
+  authDomain: "vistorias-imoveis-658b3.firebaseapp.com",
+  projectId: "vistorias-imoveis-658b3",
+  storageBucket: "vistorias-imoveis-658b3.firebasestorage.app",
+  messagingSenderId: "565072485794",
+  appId: "1:565072485794:web:8e8fedd419849b707266fb"
+};
+
+var fbApp = initializeApp(firebaseConfig);
+var db = getFirestore(fbApp);
+var auth = getAuth(fbApp);
+setPersistence(auth, browserLocalPersistence).catch(function(){});
+
+var COL = "clientes_seguros";
+var PRAZO_ALERTA_DIAS = 15;
+
+function esc(s){
+  return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function dataBR(iso){
+  if(!iso) return "";
+  var p = iso.split("-");
+  return p.length===3 ? p[2]+"/"+p[1]+"/"+p[0] : iso;
+}
+function diasAte(iso){
+  if(!iso) return null;
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+  var alvo = new Date(iso+"T00:00:00");
+  if(isNaN(alvo)) return null;
+  return Math.round((alvo-hoje)/86400000);
+}
+function urgencia(iso){
+  var d = diasAte(iso);
+  if(d==null) return "sem-data";
+  if(d<0) return "vencido";
+  if(d<=PRAZO_ALERTA_DIAS) return "perto";
+  return "ok";
+}
+function textoPrazo(iso){
+  var d = diasAte(iso);
+  if(d==null) return "Sem data de vencimento";
+  if(d<0) return "Venceu há "+Math.abs(d)+" dia"+(Math.abs(d)===1?"":"s")+" — "+dataBR(iso);
+  if(d===0) return "Vence hoje";
+  return "Vence em "+d+" dia"+(d===1?"":"s")+" — "+dataBR(iso);
+}
+
+/* ============ estado ============ */
+var app = document.getElementById("app");
+var telaLogin = document.getElementById("tela-login");
+var topoApp = document.getElementById("topo-app");
+var listaClientes = [];
+var busca = "";
+var pararEscuta = null;
+
+/* ============ autenticação ============ */
+document.getElementById("login-entrar").addEventListener("click", fazerLogin);
+document.getElementById("login-senha").addEventListener("keydown", function(e){ if(e.key==="Enter") fazerLogin(); });
+document.getElementById("btn-sair").addEventListener("click", function(){ signOut(auth); });
+
+function fazerLogin(){
+  var email = document.getElementById("login-email").value.trim();
+  var senha = document.getElementById("login-senha").value;
+  var b = document.getElementById("login-entrar");
+  b.disabled=true; b.textContent="Entrando...";
+  signInWithEmailAndPassword(auth, email, senha)
+    .catch(function(){ document.getElementById("login-erro").classList.remove("oculto"); })
+    .finally(function(){ b.disabled=false; b.textContent="Entrar"; });
+}
+
+onAuthStateChanged(auth, function(usuario){
+  if(usuario){
+    telaLogin.classList.add("oculto");
+    topoApp.classList.remove("oculto");
+    app.classList.remove("oculto");
+    document.getElementById("login-erro").classList.add("oculto");
+    escutarClientes();
+  } else {
+    telaLogin.classList.remove("oculto");
+    topoApp.classList.add("oculto");
+    app.classList.add("oculto");
+    if(pararEscuta){ pararEscuta(); pararEscuta=null; }
+  }
+});
+
+/* ============ dados, ao vivo ============ */
+function escutarClientes(){
+  montarShell();
+  document.getElementById("lista-clientes").innerHTML = '<p class="carregando">Carregando clientes…</p>';
+  pararEscuta = onSnapshot(collection(db, COL), function(snap){
+    listaClientes = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    renderLista();
+  }, function(erro){
+    document.getElementById("lista-clientes").innerHTML =
+      '<p class="carregando" style="color:var(--alerta)">Não consegui carregar: '+esc(erro.message)+'</p>';
+  });
+}
+
+// clientes antigos (antes dessa versão) tinham só dois campos fixos; isso os
+// transforma na mesma lista, sem precisar reescrever nada no banco
+function situacoesDe(c){
+  if(Array.isArray(c.situacoes)) return c.situacoes;
+  var lista = [];
+  if(c.seguroStatus || c.seguroVencimento) lista.push({nome:"Seguro incêndio", status:c.seguroStatus, vencimento:c.seguroVencimento});
+  if(c.renovStatus || c.renovVencimento) lista.push({nome:"Renovação anual", status:c.renovStatus, vencimento:c.renovVencimento});
+  return lista;
+}
+
+function urgenciaCliente(c){
+  return situacoesDe(c).some(function(s){
+    var u = urgencia(s.vencimento);
+    return u==="vencido" || u==="perto";
+  });
+}
+function chaveOrdenacao(c){
+  var ds = situacoesDe(c).map(function(s){ return diasAte(s.vencimento); }).filter(function(d){ return d!=null; });
+  return ds.length ? Math.min.apply(null, ds) : Infinity;
+}
+
+/* ============ render ============ */
+// desenhado uma vez só ao entrar: a busca nunca é recriada, então nunca perde o foco
+function montarShell(){
+  app.innerHTML =
+    '<div class="barra-topo">'+
+      '<input class="campo busca" id="busca" placeholder="Buscar por nome ou imóvel" value="'+esc(busca)+'">'+
+      '<button class="bt bt-forte" data-act="novo">+ Cliente</button>'+
+    '</div>'+
+    '<div id="lista-clientes"></div>';
+}
+
+// só essa parte é redesenhada a cada letra digitada ou atualização vinda do Firestore
+function renderLista(){
+  var termo = busca.trim().toLowerCase();
+  var filtrados = listaClientes.filter(function(c){
+    return !termo || (c.nome||"").toLowerCase().indexOf(termo)>=0 || (c.imovel||"").toLowerCase().indexOf(termo)>=0;
+  });
+  filtrados.sort(function(a,b){ return chaveOrdenacao(a)-chaveOrdenacao(b); });
+
+  var alvo = document.getElementById("lista-clientes");
+  if(!alvo) return;
+
+  if(!listaClientes.length){
+    alvo.innerHTML = '<div class="vazio"><h3>Nenhum cliente cadastrado</h3>'+
+      '<p>Cadastre o cliente e as datas de seguro incêndio e renovação anual.</p>'+
+      '<button class="bt bt-forte" data-act="novo">Cadastrar cliente</button></div>';
+  } else if(!filtrados.length){
+    alvo.innerHTML = '<div class="vazio"><h3>Nada encontrado</h3><p>Confere o termo da busca.</p></div>';
+  } else {
+    alvo.innerHTML = '<p class="contagem">'+filtrados.length+' cliente'+(filtrados.length===1?'':'s')+'</p>'+
+      '<div class="cards">'+filtrados.map(cardCliente).join('')+'</div>';
+  }
+}
+
+function cardCliente(c){
+  var situacoes = situacoesDe(c);
+  var caixas = situacoes.map(function(s){
+    var u = urgencia(s.vencimento);
+    return '<div class="situacao '+u+'"><div class="rot">'+esc(s.nome||"Situação")+'</div>'+
+      '<div class="stt">'+(s.status?esc(s.status):"Sem status")+'</div>'+
+      '<div class="prz">'+esc(textoPrazo(s.vencimento))+'</div></div>';
+  }).join('');
+  return '<button class="card-cli'+(urgenciaCliente(c)?' urgente':'')+'" data-act="abrir" data-id="'+c.id+'">'+
+    '<div class="card-cli-topo"><h3>'+esc(c.nome)+'</h3></div>'+
+    (c.imovel?'<div class="imovel">'+esc(c.imovel)+'</div>':'')+
+    (c.telefone?'<div class="tel">'+esc(c.telefone)+'</div>':'')+
+    (caixas?'<div class="situacoes">'+caixas+'</div>':'<p style="font-size:13px;color:var(--tinta-3);margin-top:10px">Nenhuma situação cadastrada</p>')+
+    '</button>';
+}
+
+/* ============ formulário (novo / editar) ============ */
+var situacoesForm = []; // lista em memória enquanto o diálogo está aberto
+
+function blocoSituacaoHTML(s, idx){
+  return '<div class="bloco-situacao" data-idx="'+idx+'">'+
+    '<div class="bloco-situacao-topo">'+
+      '<input class="campo" data-sf="nome" value="'+esc(s.nome)+'" placeholder="Nome da situação, ex: IPTU">'+
+      '<button type="button" class="remover-situ" data-remover="'+idx+'" title="Remover">✕</button>'+
+    '</div>'+
+    '<div class="grade-2">'+
+      '<div><span class="rotulo">Status</span><input class="campo" data-sf="status" value="'+esc(s.status)+'" placeholder="Em dia, aguardando…"></div>'+
+      '<div><span class="rotulo">Vencimento</span><input class="campo" type="date" data-sf="vencimento" value="'+esc(s.vencimento)+'"></div>'+
+    '</div>'+
+  '</div>';
+}
+function redesenharSituacoes(d){
+  d.querySelector("#blocos-situacao").innerHTML = situacoesForm.map(blocoSituacaoHTML).join('');
+}
+
+function abrirFormulario(cliente){
+  var editando = !!cliente;
+  var c = cliente || {};
+  situacoesForm = situacoesDe(c).length ? situacoesDe(c).slice() :
+    [{nome:"Seguro incêndio", status:"", vencimento:""}, {nome:"Renovação anual", status:"", vencimento:""}];
+
+  var d = document.createElement("div"); d.className="dialogo";
+  d.innerHTML =
+    '<div class="dialogo-caixa">'+
+      '<h3>'+(editando?"Editar cliente":"Novo cliente")+'</h3>'+
+      '<span class="rotulo">Nome do cliente</span>'+
+      '<input class="campo" data-c="nome" value="'+esc(c.nome)+'" placeholder="Nome completo">'+
+      '<div class="grade-2">'+
+        '<div><span class="rotulo">Telefone</span><input class="campo" data-c="telefone" value="'+esc(c.telefone)+'" placeholder="71 90000-0000"></div>'+
+        '<div><span class="rotulo">Imóvel / endereço</span><input class="campo" data-c="imovel" value="'+esc(c.imovel)+'" placeholder="Rua, nº, bairro"></div>'+
+      '</div>'+
+
+      '<div id="blocos-situacao">'+situacoesForm.map(blocoSituacaoHTML).join('')+'</div>'+
+      '<button type="button" class="add-situacao" data-add-situacao="1">+ Adicionar situação</button>'+
+
+      '<span class="rotulo">Observações</span>'+
+      '<textarea class="campo" data-c="observacoes" placeholder="Qualquer detalhe a mais">'+esc(c.observacoes)+'</textarea>'+
+
+      '<p class="msg-erro oculto" data-erro></p>'+
+      '<div class="rodape-dialogo">'+
+        '<button class="bt" data-x="1">Cancelar</button>'+
+        '<button class="bt bt-forte" data-ok="1">Salvar</button>'+
+      '</div>'+
+      (editando?'<button class="link-apagar" data-apagar="1">Apagar cliente</button>':'')+
+    '</div>';
+
+  // guarda o que já foi digitado nos blocos antes de redesenhar (adicionar/remover situação)
+  function capturarSituacoesDoDOM(){
+    d.querySelectorAll("#blocos-situacao > .bloco-situacao").forEach(function(bloco, i){
+      situacoesForm[i] = {
+        nome: bloco.querySelector('[data-sf="nome"]').value,
+        status: bloco.querySelector('[data-sf="status"]').value,
+        vencimento: bloco.querySelector('[data-sf="vencimento"]').value
+      };
+    });
+  }
+
+  d.addEventListener("click", async function(e){
+    if(e.target===d || e.target.dataset.x){ d.remove(); return; }
+
+    if(e.target.dataset.addSituacao!==undefined){
+      capturarSituacoesDoDOM();
+      situacoesForm.push({nome:"", status:"", vencimento:""});
+      redesenharSituacoes(d);
+      return;
+    }
+    if(e.target.dataset.remover!==undefined){
+      capturarSituacoesDoDOM();
+      situacoesForm.splice(Number(e.target.dataset.remover), 1);
+      redesenharSituacoes(d);
+      return;
+    }
+
+    if(e.target.dataset.apagar){
+      if(!confirm("Apagar "+ (c.nome||"este cliente") +"? Não tem como desfazer.")) return;
+      try{ await deleteDoc(doc(db, COL, c.id)); d.remove(); }
+      catch(err){ mostrarErroForm(d, err.message); }
+      return;
+    }
+
+    if(e.target.dataset.ok){
+      capturarSituacoesDoDOM();
+      var v = {};
+      d.querySelectorAll(".dialogo-caixa > [data-c]").forEach(function(el){ v[el.dataset.c]=el.value.trim(); });
+      if(!v.nome){ mostrarErroForm(d, "Dá um nome para o cliente."); return; }
+
+      v.situacoes = situacoesForm
+        .map(function(s){ return {nome:(s.nome||"").trim()||"Situação", status:(s.status||"").trim(), vencimento:s.vencimento||""}; })
+        .filter(function(s){ return s.nome!=="Situação" || s.status || s.vencimento; });
+      // limpa os campos antigos, caso o cliente venha do formato anterior
+      v.seguroStatus = null; v.seguroVencimento = null; v.renovStatus = null; v.renovVencimento = null;
+
+      var btn = e.target; btn.disabled=true; btn.textContent="Salvando...";
+      try{
+        if(editando){
+          v.atualizadoEm = serverTimestamp();
+          await updateDoc(doc(db, COL, c.id), v);
+        } else {
+          v.criadoEm = serverTimestamp();
+          v.atualizadoEm = serverTimestamp();
+          await addDoc(collection(db, COL), v);
+        }
+        d.remove();
+      } catch(err){
+        mostrarErroForm(d, err.message);
+        btn.disabled=false; btn.textContent="Salvar";
+      }
+    }
+  });
+  document.body.appendChild(d);
+  var p = d.querySelector("[data-c]"); if(p) p.focus();
+}
+function mostrarErroForm(d, msg){
+  var el = d.querySelector("[data-erro]");
+  el.textContent = msg; el.classList.remove("oculto");
+}
+
+/* ============ eventos ============ */
+document.addEventListener("click", function(e){
+  var el = e.target.closest("[data-act]");
+  if(!el) return;
+  var act = el.dataset.act;
+  if(act==="novo") return abrirFormulario(null);
+  if(act==="abrir"){
+    var c = listaClientes.find(function(x){ return x.id===el.dataset.id; });
+    if(c) abrirFormulario(c);
+  }
+});
+
+document.addEventListener("input", function(e){
+  if(e.target.id==="busca"){
+    busca = e.target.value;
+    renderLista();
+  }
+});
+</script>
+</body>
+</html>
