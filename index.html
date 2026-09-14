@@ -232,6 +232,35 @@ var OPCOES_AVISO = [7,10,15,30,60,90];
 var DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
 /* ============ utilidades ============ */
+/* Consulta o CEP em duas bases públicas (BrasilAPI e, se falhar, ViaCEP).
+   Devolve uma linha pronta pra colar no campo de endereço, ou null. */
+async function buscarCep(cep){
+  var d = String(cep).replace(/\D/g,"");
+  if(d.length!==8) return null;
+  function comPrazo(url){
+    return Promise.race([
+      fetch(url),
+      new Promise(function(_,rej){ setTimeout(function(){ rej(new Error("demorou")); },6000); })
+    ]);
+  }
+  try{
+    var r = await comPrazo("https://brasilapi.com.br/api/cep/v1/"+d);
+    if(r.ok){
+      var j = await r.json();
+      if(j && j.street!==undefined){
+        return [j.street, j.neighborhood].filter(Boolean).join(", ") + (j.city?" — "+j.city:"");
+      }
+    }
+  }catch(e){}
+  try{
+    var r2 = await comPrazo("https://viacep.com.br/ws/"+d+"/json/");
+    if(!r2.ok) return null;
+    var j2 = await r2.json();
+    if(j2.erro) return null;
+    return [j2.logradouro, j2.bairro].filter(Boolean).join(", ") + (j2.localidade?" — "+j2.localidade:"");
+  }catch(e){ return null; }
+}
+
 function esc(s){
   return String(s==null?"":s).replace(/[&<>"']/g, function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
@@ -563,8 +592,12 @@ function abrirFormulario(cliente){
       '<input class="campo" data-c="nome" value="'+esc(c.nome)+'" placeholder="Nome completo">'+
       '<div class="grade-2">'+
         '<div><span class="rotulo">Telefone</span><input class="campo" data-c="telefone" value="'+esc(c.telefone)+'" placeholder="71 90000-0000"></div>'+
-        '<div><span class="rotulo">Imóvel / endereço</span><input class="campo" data-c="imovel" value="'+esc(c.imovel)+'" placeholder="Rua, nº, bairro"></div>'+
+        '<div><span class="rotulo">CEP (opcional, só pra ajudar a preencher)</span>'+
+          '<input class="campo" id="cep-ajuda" placeholder="41.192-065" inputmode="numeric"></div>'+
       '</div>'+
+      '<span class="rotulo" id="cep-dica" style="min-height:16px;display:block"></span>'+
+      '<span class="rotulo">Imóvel / endereço</span>'+
+      '<input class="campo" data-c="imovel" value="'+esc(c.imovel)+'" placeholder="Rua, nº, bairro">'+
 
       '<div class="secao-form"><div class="tit">Prazos a acompanhar</div>'+
         '<div id="blocos-situacao"></div>'+
@@ -680,6 +713,24 @@ function abrirFormulario(cliente){
         erroForm(d, err.message);
         btn.disabled=false; btn.textContent="Salvar";
       }
+    }
+  });
+
+  d.addEventListener("input", async function(e){
+    if(e.target.id !== "cep-ajuda") return;
+    var dig = e.target.value.replace(/\D/g,"").slice(0,8);
+    e.target.value = dig.length>5 ? dig.slice(0,2)+"."+dig.slice(2,5)+"-"+dig.slice(5) : dig;
+    var dica = d.querySelector("#cep-dica");
+    if(dig.length !== 8){ dica.textContent=""; return; }
+    dica.textContent = "Buscando…";
+    var achado = await buscarCep(dig);
+    if(!achado){ dica.textContent="CEP não encontrado. Preenche o endereço à mão."; return; }
+    var campoImovel = d.querySelector('[data-c="imovel"]');
+    if(!campoImovel.value.trim()){
+      campoImovel.value = achado;
+      dica.textContent = "Preenchi o endereço abaixo — só falta o número.";
+    } else {
+      dica.textContent = "Achei: "+achado+" (o campo abaixo já tinha algo, não mudei).";
     }
   });
 
