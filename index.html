@@ -78,6 +78,15 @@
   .aba{border:1px solid var(--linha);background:var(--carta);color:var(--tinta-2);border-radius:var(--raio);
     padding:8px 16px;font-size:14px;font-weight:500;cursor:pointer}
   .aba.on{background:var(--verde);border-color:var(--verde);color:#fff}
+  .abas-principais{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--linha-2);padding-bottom:14px}
+  .aba-principal{border:1px solid var(--linha);background:var(--carta);color:var(--tinta-2);border-radius:var(--raio);
+    padding:10px 18px;font-size:14.5px;font-weight:600;cursor:pointer}
+  .aba-principal.on{background:var(--tinta);border-color:var(--tinta);color:#fff}
+  .linha-pessoa{display:grid;grid-template-columns:1fr 1fr 42px;gap:8px;margin-bottom:8px}
+  @media(max-width:520px){.linha-pessoa{grid-template-columns:1fr 1fr;grid-template-areas:"a b" "c c"}
+    .linha-pessoa input:first-child{grid-area:a}.linha-pessoa input:last-child{grid-area:b}.linha-pessoa button{grid-area:c}}
+  .chk-indeterminado{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--tinta-2);margin:10px 0 4px;cursor:pointer}
+  .chk-indeterminado input{width:auto}
   .contagem{font-size:13px;color:var(--tinta-3);margin:0 0 12px}
 
   /* cards */
@@ -227,8 +236,13 @@ var auth = getAuth(fbApp);
 setPersistence(auth, browserLocalPersistence).catch(function(){});
 
 var COL = "clientes_seguros";
+var COL_LOCACOES = "locacoes";
 var AVISO_PADRAO = 15;            // dias de antecedência quando a situação não define o próprio
+var AVISO_PADRAO_LOCACAO = 30;    // locação avisa com mais folga, por causa do aviso prévio da Lei do Inquilinato
 var OPCOES_AVISO = [7,10,15,30,60,90];
+var GARANTIAS = ["Fiador","Caução","Seguro fiança","Título de capitalização"];
+var INDICES_REAJUSTE = ["IGP-M","IPCA"];
+var STATUS_CONTRATO = [["ativo","Ativo"],["renovacao","Em renovação"],["rescindido","Rescindido"]];
 var DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
 /* ============ utilidades ============ */
@@ -303,6 +317,53 @@ function textoPrazo(s){
   if(d===0) return "Vence hoje — "+dataBR(s.vencimento);
   return "Vence em "+d+" dia"+(d===1?"":"s")+" — "+dataBR(s.vencimento);
 }
+/* soma 1 ano a uma data ISO, preservando dia e mês — usado para achar
+   a data do próximo reajuste a partir do último (ou do início do contrato) */
+function maisUmAno(iso){
+  if(!iso) return null;
+  var d = new Date(iso+"T00:00:00");
+  if(isNaN(d)) return null;
+  d.setFullYear(d.getFullYear()+1);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function proximoReajuste(loc){
+  return maisUmAno(loc.dataUltimoReajuste || loc.dataInicio);
+}
+function pessoasDe(lista){ return Array.isArray(lista) ? lista : []; }
+function nomesDe(lista){
+  var ps = pessoasDe(lista).map(function(p){ return p.nome; }).filter(Boolean);
+  return ps.length ? ps.join(" e ") : "";
+}
+function avisoDeLocacao(loc){
+  var n = Number(loc && loc.aviso);
+  return (n && n>0) ? n : AVISO_PADRAO_LOCACAO;
+}
+function urgenciaLocacao(loc){
+  var pontos = [];
+  if(!loc.indeterminado && loc.dataTermino) pontos.push(urgenciaData(loc.dataTermino, avisoDeLocacao(loc)));
+  var pr = proximoReajuste(loc);
+  if(pr) pontos.push(urgenciaData(pr, avisoDeLocacao(loc)));
+  if(pontos.indexOf("vencido")>=0) return "vencido";
+  if(pontos.indexOf("perto")>=0) return "perto";
+  if(pontos.indexOf("ok")>=0) return "ok";
+  return "sem-data";
+}
+function urgenciaData(iso, dias){
+  var d = diasAte(iso);
+  if(d==null) return "sem-data";
+  if(d<0) return "vencido";
+  if(d<=dias) return "perto";
+  return "ok";
+}
+function chaveOrdenacaoLocacao(loc){
+  var datas = [];
+  if(!loc.indeterminado && loc.dataTermino) datas.push(diasAte(loc.dataTermino));
+  var pr = proximoReajuste(loc);
+  if(pr) datas.push(diasAte(pr));
+  var validas = datas.filter(function(d){ return d!=null; });
+  return validas.length ? Math.min.apply(null, validas) : Infinity;
+}
+
 // aceita clientes salvos no formato antigo, de duas situações fixas
 function situacoesDe(c){
   if(Array.isArray(c.situacoes)) return c.situacoes;
@@ -346,6 +407,11 @@ var filtro = "todos";              // todos | vencido | perto | ok
 var aba = "lista";                 // lista | calendario
 var mesCal = new Date();           // mês exibido no calendário
 var pararEscuta = null;
+var abaPrincipal = "clientes";     // clientes | locacoes
+var listaLocacoes = [];
+var buscaLoc = "";
+var filtroLoc = "todos";
+var pararEscutaLoc = null;
 
 /* ============ autenticação ============ */
 document.getElementById("login-entrar").addEventListener("click", fazerLogin);
@@ -368,12 +434,15 @@ onAuthStateChanged(auth, function(usuario){
     topoApp.classList.remove("oculto");
     app.classList.remove("oculto");
     document.getElementById("login-erro").classList.add("oculto");
+    montarAbasPrincipais();
     escutarClientes();
+    escutarLocacoes();
   } else {
     telaLogin.classList.remove("oculto");
     topoApp.classList.add("oculto");
     app.classList.add("oculto");
     if(pararEscuta){ pararEscuta(); pararEscuta=null; }
+    if(pararEscutaLoc){ pararEscutaLoc(); pararEscutaLoc=null; }
   }
 });
 
@@ -390,10 +459,141 @@ function escutarClientes(){
   });
 }
 
+/* ============ locações: dados ao vivo ============ */
+function escutarLocacoes(){
+  montarShellLoc();
+  document.getElementById("conteudo-loc").innerHTML='<p class="carregando">Carregando locações…</p>';
+  pararEscutaLoc = onSnapshot(collection(db,COL_LOCACOES), function(snap){
+    listaLocacoes = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    renderPainelLoc(); renderConteudoLoc();
+  }, function(erro){
+    document.getElementById("conteudo-loc").innerHTML=
+      '<p class="carregando" style="color:var(--alerta)">Não consegui carregar: '+esc(erro.message)+'</p>';
+  });
+}
+
+function montarShellLoc(){
+  var alvo = document.getElementById("area-locacoes");
+  if(!alvo) return;
+  alvo.innerHTML =
+    '<div id="painel-loc" class="painel"></div>'+
+    '<div class="barra-topo">'+
+      '<input class="campo busca" id="busca-loc" placeholder="Buscar por locador, locatário ou imóvel" value="'+esc(buscaLoc)+'">'+
+      '<button class="bt bt-forte" data-act="novo-loc">+ Locação</button>'+
+    '</div>'+
+    '<div id="conteudo-loc"></div>';
+}
+
+function renderPainelLoc(){
+  var ativo=0, perto=0, vencido=0;
+  listaLocacoes.forEach(function(loc){
+    var u = urgenciaLocacao(loc);
+    if(u==="vencido") vencido++; else if(u==="perto") perto++;
+    if((loc.status||"ativo")==="ativo") ativo++;
+  });
+  var el=document.getElementById("painel-loc"); if(!el) return;
+  function item(chave,classe,n,rot){
+    return '<button class="painel-item '+classe+(filtroLoc===chave?' on':'')+'" data-filtro-loc="'+chave+'">'+
+      '<div class="n">'+n+'</div><div class="r">'+rot+'</div></button>';
+  }
+  el.innerHTML =
+    item("todos","emdia",ativo,"contrato"+(ativo===1?"":"s")+" ativo"+(ativo===1?"":"s"))+
+    item("perto","proximos",perto,"vencendo ou reajustando")+
+    item("vencido","vencidos",vencido,"atrasado"+(vencido===1?"":"s"));
+}
+
+function locacoesFiltradas(){
+  var termo=buscaLoc.trim().toLowerCase();
+  return listaLocacoes.filter(function(loc){
+    var texto=(nomesDe(loc.locadores)+" "+nomesDe(loc.locatarios)+" "+(loc.imovel||"")).toLowerCase();
+    var bateBusca = !termo || texto.indexOf(termo)>=0;
+    var bateFiltro = filtroLoc==="todos" || urgenciaLocacao(loc)===filtroLoc;
+    return bateBusca && bateFiltro;
+  }).sort(function(a,b){ return chaveOrdenacaoLocacao(a)-chaveOrdenacaoLocacao(b); });
+}
+
+function renderConteudoLoc(){
+  var alvo=document.getElementById("conteudo-loc"); if(!alvo) return;
+  var filtradas = locacoesFiltradas();
+  if(!listaLocacoes.length){
+    alvo.innerHTML='<div class="vazio"><h3>Nenhuma locação cadastrada</h3>'+
+      '<p>Cadastre o contrato com locador, locatário e as datas principais.</p>'+
+      '<button class="bt bt-forte" data-act="novo-loc">Cadastrar locação</button></div>';
+    return;
+  }
+  if(!filtradas.length){
+    alvo.innerHTML='<div class="vazio"><h3>Nada por aqui</h3><p>Nenhuma locação com esse filtro ou essa busca.</p></div>';
+    return;
+  }
+  alvo.innerHTML='<p class="contagem">'+filtradas.length+' locaç'+(filtradas.length===1?'ão':'ões')+'</p>'+
+    '<div class="cards">'+filtradas.map(cardLocacao).join('')+'</div>';
+}
+
+function cardLocacao(loc){
+  var u = urgenciaLocacao(loc);
+  var classe = u==="vencido" ? " urgente" : (u==="perto" ? " proximo" : "");
+  var pr = proximoReajuste(loc);
+  var statusRot = (STATUS_CONTRATO.find(function(s){ return s[0]===(loc.status||"ativo"); })||["","Ativo"])[1];
+  return '<div class="card-cli'+classe+'">'+
+    '<div class="card-topo">'+
+      '<div style="min-width:0">'+
+        '<h3>'+esc(nomesDe(loc.locatarios) || "Locatário não informado")+'</h3>'+
+        '<div class="imovel">'+esc(loc.imovel||"Endereço não informado")+'</div>'+
+        '<div class="imovel">Locador: '+esc(nomesDe(loc.locadores) || "não informado")+'</div>'+
+      '</div>'+
+      '<div class="card-acoes">'+
+        '<button class="ic" data-act="abrir-loc" data-id="'+loc.id+'" title="Editar">✎</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="situacoes">'+
+      '<div class="situacao '+(loc.indeterminado?"ok":urgenciaData(loc.dataTermino, avisoDeLocacao(loc)))+'">'+
+        '<div class="rot">Contrato</div>'+
+        '<div class="stt">'+esc(statusRot)+(loc.garantia?" · "+esc(loc.garantia):"")+'</div>'+
+        '<div class="prz">'+(loc.indeterminado ? "Prazo indeterminado" : esc(textoPrazoData(loc.dataTermino)))+'</div>'+
+      '</div>'+
+      '<div class="situacao '+(pr?urgenciaData(pr, avisoDeLocacao(loc)):"sem-data")+'">'+
+        '<div class="rot">Próximo reajuste</div>'+
+        '<div class="stt">'+(loc.indiceReajuste?esc(loc.indiceReajuste):"Índice não definido")+'</div>'+
+        '<div class="prz">'+(pr ? esc(textoPrazoData(pr)) : "Sem data de início para calcular")+'</div>'+
+      '</div>'+
+    '</div>'+
+    (loc.valorAluguel?'<div class="ultimo-contato">Aluguel: R$ '+esc(loc.valorAluguel)+(loc.taxaAdm?" · Taxa adm.: "+esc(loc.taxaAdm)+"%":"")+'</div>':'')+
+  '</div>';
+}
+function textoPrazoData(iso){
+  var d = diasAte(iso);
+  if(d==null) return "Sem data";
+  if(d<0) return "Venceu há "+Math.abs(d)+" dia"+(Math.abs(d)===1?"":"s")+" — "+dataBR(iso);
+  if(d===0) return "Vence hoje — "+dataBR(iso);
+  return "Vence em "+d+" dia"+(d===1?"":"s")+" — "+dataBR(iso);
+}
+
 /* ============ render ============ */
 // desenhado uma vez: busca e abas não são recriadas, então não perdem o foco
-function montarShell(){
+/* ============ abas principais: Clientes | Locações ============ */
+function montarAbasPrincipais(){
   app.innerHTML =
+    '<div class="abas-principais">'+
+      '<button class="aba-principal" data-aba-principal="clientes">Clientes (seguro/renovação)</button>'+
+      '<button class="aba-principal" data-aba-principal="locacoes">Locações</button>'+
+    '</div>'+
+    '<div id="area-clientes"></div>'+
+    '<div id="area-locacoes" class="oculto"></div>';
+  marcarAbaPrincipal();
+}
+function marcarAbaPrincipal(){
+  app.querySelectorAll("[data-aba-principal]").forEach(function(b){
+    b.classList.toggle("on", b.dataset.abaPrincipal===abaPrincipal);
+  });
+  var ac=document.getElementById("area-clientes"), al=document.getElementById("area-locacoes");
+  if(ac) ac.classList.toggle("oculto", abaPrincipal!=="clientes");
+  if(al) al.classList.toggle("oculto", abaPrincipal!=="locacoes");
+}
+
+function montarShell(){
+  var alvo = document.getElementById("area-clientes");
+  if(!alvo) return;
+  alvo.innerHTML =
     '<div id="painel" class="painel"></div>'+
     '<div class="barra-topo">'+
       '<input class="campo busca" id="busca" placeholder="Buscar por nome ou imóvel" value="'+esc(busca)+'">'+
@@ -575,6 +775,195 @@ function redesenhar(d){
     : '<p style="font-size:13px;color:var(--tinta-3);margin:0">Nenhum contato registrado.</p>';
 }
 
+/* ============ formulário de locação ============ */
+var pessoasLocadorForm=[], pessoasLocatarioForm=[];
+
+function blocoPessoaHTML(p, idx, tipo){
+  return '<div class="linha-pessoa">'+
+    '<input class="campo" data-pf="nome" placeholder="Nome" value="'+esc(p.nome)+'">'+
+    '<input class="campo" data-pf="telefone" placeholder="Telefone" value="'+esc(p.telefone)+'">'+
+    '<button type="button" class="mini-bt" data-remover-pessoa="'+tipo+':'+idx+'" title="Remover">✕</button>'+
+  '</div>';
+}
+function redesenharPessoas(d){
+  d.querySelector("#lista-locadores").innerHTML = pessoasLocadorForm.map(function(p,i){ return blocoPessoaHTML(p,i,"locador"); }).join('');
+  d.querySelector("#lista-locatarios").innerHTML = pessoasLocatarioForm.map(function(p,i){ return blocoPessoaHTML(p,i,"locatario"); }).join('');
+}
+
+function abrirFormularioLocacao(locacao){
+  var editando = !!locacao;
+  var loc = locacao || {};
+  pessoasLocadorForm = pessoasDe(loc.locadores).length ? pessoasDe(loc.locadores).map(function(p){ return Object.assign({},p); }) : [{nome:"",telefone:""}];
+  pessoasLocatarioForm = pessoasDe(loc.locatarios).length ? pessoasDe(loc.locatarios).map(function(p){ return Object.assign({},p); }) : [{nome:"",telefone:""}];
+
+  var opcoesGarantia = GARANTIAS.map(function(g){ return '<option'+(loc.garantia===g?' selected':'')+'>'+g+'</option>'; }).join('');
+  var opcoesIndice = INDICES_REAJUSTE.map(function(i){ return '<option'+(loc.indiceReajuste===i?' selected':'')+'>'+i+'</option>'; }).join('');
+  var opcoesStatus = STATUS_CONTRATO.map(function(s){ return '<option value="'+s[0]+'"'+((loc.status||"ativo")===s[0]?' selected':'')+'>'+s[1]+'</option>'; }).join('');
+  var opcoesAviso = OPCOES_AVISO.map(function(n){
+    var atual = Number(loc.aviso)>0 ? Number(loc.aviso) : AVISO_PADRAO_LOCACAO;
+    return '<option value="'+n+'"'+(atual===n?' selected':'')+'>'+n+' dias antes</option>';
+  }).join('');
+
+  var d=document.createElement("div"); d.className="dialogo";
+  d.innerHTML=
+    '<div class="dialogo-caixa">'+
+      '<h3>'+(editando?"Editar locação":"Nova locação")+'</h3>'+
+
+      '<div class="secao-form"><div class="tit">Locador(es)</div>'+
+        '<div id="lista-locadores"></div>'+
+        '<button type="button" class="add-situacao" data-add-pessoa="locador">+ Adicionar locador</button>'+
+      '</div>'+
+
+      '<div class="secao-form"><div class="tit">Locatário(s)</div>'+
+        '<div id="lista-locatarios"></div>'+
+        '<button type="button" class="add-situacao" data-add-pessoa="locatario">+ Adicionar locatário</button>'+
+      '</div>'+
+
+      '<div class="secao-form"><div class="tit">Imóvel</div>'+
+        '<div class="grade-2">'+
+          '<div><span class="rotulo">CEP (opcional, só pra ajudar)</span><input class="campo" id="cep-ajuda-loc" placeholder="41.192-065" inputmode="numeric"></div>'+
+          '<div><span class="rotulo">&nbsp;</span><span class="rotulo" id="cep-dica-loc" style="min-height:16px;display:block;margin-top:12px"></span></div>'+
+        '</div>'+
+        '<span class="rotulo">Endereço</span>'+
+        '<input class="campo" data-c="imovel" value="'+esc(loc.imovel)+'" placeholder="Rua, nº, bairro">'+
+      '</div>'+
+
+      '<div class="secao-form"><div class="tit">Contrato</div>'+
+        '<div class="grade-3">'+
+          '<div><span class="rotulo">Valor do aluguel (R$)</span><input class="campo" data-c="valorAluguel" value="'+esc(loc.valorAluguel)+'" inputmode="decimal" placeholder="1.500,00"></div>'+
+          '<div><span class="rotulo">Taxa de administração (%)</span><input class="campo" data-c="taxaAdm" value="'+esc(loc.taxaAdm)+'" inputmode="decimal" placeholder="10"></div>'+
+          '<div><span class="rotulo">Garantia</span><select class="campo" data-c="garantia"><option value=""></option>'+opcoesGarantia+'</select></div>'+
+        '</div>'+
+        '<div class="grade-3">'+
+          '<div><span class="rotulo">Início do contrato</span><input class="campo" type="date" data-c="dataInicio" value="'+esc(loc.dataInicio)+'"></div>'+
+          '<div><span class="rotulo">Término do contrato</span><input class="campo" type="date" data-c="dataTermino" id="campo-termino" value="'+esc(loc.dataTermino)+'" '+(loc.indeterminado?'disabled':'')+'></div>'+
+          '<div><span class="rotulo">Status</span><select class="campo" data-c="status">'+opcoesStatus+'</select></div>'+
+        '</div>'+
+        '<label class="chk-indeterminado"><input type="checkbox" id="check-indeterminado" '+(loc.indeterminado?'checked':'')+'> Prazo indeterminado (sem data de término)</label>'+
+        '<div class="grade-3">'+
+          '<div><span class="rotulo">Índice de reajuste</span><select class="campo" data-c="indiceReajuste"><option value=""></option>'+opcoesIndice+'</select></div>'+
+          '<div><span class="rotulo">Data do último reajuste</span><input class="campo" type="date" data-c="dataUltimoReajuste" value="'+esc(loc.dataUltimoReajuste)+'"></div>'+
+          '<div><span class="rotulo">Avisar reajuste/vencimento</span><select class="campo" data-c="aviso">'+opcoesAviso+'</select></div>'+
+        '</div>'+
+      '</div>'+
+
+      '<span class="rotulo">Observações</span>'+
+      '<textarea class="campo" data-c="observacoes" placeholder="Qualquer detalhe a mais">'+esc(loc.observacoes)+'</textarea>'+
+
+      '<p class="msg-erro oculto" data-erro></p>'+
+      '<div class="rodape-dialogo">'+
+        '<button class="bt" data-x="1">Cancelar</button>'+
+        '<button class="bt bt-forte" data-ok="1">Salvar</button>'+
+      '</div>'+
+      (editando?'<button class="link-apagar" data-apagar="1">Apagar locação</button>':'')+
+    '</div>';
+
+  function capturarPessoas(){
+    d.querySelectorAll("#lista-locadores .linha-pessoa").forEach(function(linha,i){
+      pessoasLocadorForm[i] = { nome: linha.querySelector('[data-pf="nome"]').value, telefone: linha.querySelector('[data-pf="telefone"]').value };
+    });
+    d.querySelectorAll("#lista-locatarios .linha-pessoa").forEach(function(linha,i){
+      pessoasLocatarioForm[i] = { nome: linha.querySelector('[data-pf="nome"]').value, telefone: linha.querySelector('[data-pf="telefone"]').value };
+    });
+  }
+
+  d.addEventListener("change", function(e){
+    if(e.target.id==="check-indeterminado"){
+      var campoTermino = d.querySelector("#campo-termino");
+      campoTermino.disabled = e.target.checked;
+      if(e.target.checked) campoTermino.value="";
+    }
+  });
+
+  d.addEventListener("input", async function(e){
+    if(e.target.id !== "cep-ajuda-loc") return;
+    var dig = e.target.value.replace(/\D/g,"").slice(0,8);
+    e.target.value = dig.length>5 ? dig.slice(0,2)+"."+dig.slice(2,5)+"-"+dig.slice(5) : dig;
+    var dica = d.querySelector("#cep-dica-loc");
+    if(dig.length !== 8){ dica.textContent=""; return; }
+    dica.textContent = "Buscando…";
+    var achado = await buscarCep(dig);
+    if(!achado){ dica.textContent="CEP não encontrado. Preenche à mão."; return; }
+    var campoImovel = d.querySelector('[data-c="imovel"]');
+    if(!campoImovel.value.trim()){
+      campoImovel.value = achado;
+      dica.textContent = "Preenchi o endereço abaixo — só falta o número.";
+    } else {
+      dica.textContent = "Achei: "+achado+" (o campo abaixo já tinha algo, não mudei).";
+    }
+  });
+
+  d.addEventListener("click", async function(e){
+    var alvo=e.target;
+    if(alvo===d || alvo.dataset.x){ d.remove(); return; }
+
+    if(alvo.dataset.addPessoa!==undefined){
+      capturarPessoas();
+      if(alvo.dataset.addPessoa==="locador") pessoasLocadorForm.push({nome:"",telefone:""});
+      else pessoasLocatarioForm.push({nome:"",telefone:""});
+      redesenharPessoas(d); return;
+    }
+    if(alvo.dataset.removerPessoa!==undefined){
+      capturarPessoas();
+      var partes = alvo.dataset.removerPessoa.split(":");
+      var lista = partes[0]==="locador" ? pessoasLocadorForm : pessoasLocatarioForm;
+      if(lista.length>1) lista.splice(Number(partes[1]),1);
+      redesenharPessoas(d); return;
+    }
+
+    if(alvo.dataset.apagar){
+      if(!confirm("Apagar esta locação? Não tem como desfazer.")) return;
+      try{ await deleteDoc(doc(db,COL_LOCACOES,loc.id)); d.remove(); }
+      catch(err){ erroFormLoc(d, err.message); }
+      return;
+    }
+
+    if(alvo.dataset.ok){
+      capturarPessoas();
+      var v={};
+      d.querySelectorAll(".dialogo-caixa > [data-c], .secao-form > [data-c]").forEach(function(el){
+        v[el.dataset.c]=el.value.trim();
+      });
+      d.querySelectorAll(".secao-form select[data-c], .secao-form input[data-c]").forEach(function(el){
+        v[el.dataset.c]=el.value.trim();
+      });
+
+      v.locadores = pessoasLocadorForm.filter(function(p){ return (p.nome||"").trim() || (p.telefone||"").trim(); })
+        .map(function(p){ return {nome:(p.nome||"").trim(), telefone:(p.telefone||"").trim()}; });
+      v.locatarios = pessoasLocatarioForm.filter(function(p){ return (p.nome||"").trim() || (p.telefone||"").trim(); })
+        .map(function(p){ return {nome:(p.nome||"").trim(), telefone:(p.telefone||"").trim()}; });
+      v.indeterminado = d.querySelector("#check-indeterminado").checked;
+      if(v.indeterminado) v.dataTermino = "";
+
+      if(!v.locadores.length && !v.locatarios.length){
+        erroFormLoc(d, "Preenche pelo menos o locador ou o locatário."); return;
+      }
+
+      var btn=alvo; btn.disabled=true; btn.textContent="Salvando...";
+      try{
+        if(editando){
+          v.atualizadoEm=serverTimestamp();
+          await updateDoc(doc(db,COL_LOCACOES,loc.id), v);
+        } else {
+          v.criadoEm=serverTimestamp(); v.atualizadoEm=serverTimestamp();
+          await addDoc(collection(db,COL_LOCACOES), v);
+        }
+        d.remove();
+      }catch(err){
+        erroFormLoc(d, err.message);
+        btn.disabled=false; btn.textContent="Salvar";
+      }
+    }
+  });
+
+  document.body.appendChild(d);
+  redesenharPessoas(d);
+}
+function erroFormLoc(d,msg){
+  var el=d.querySelector("[data-erro]");
+  el.textContent=msg; el.classList.remove("oculto");
+}
+
 function abrirFormulario(cliente){
   var editando=!!cliente;
   var c=cliente||{};
@@ -754,11 +1143,21 @@ function erroForm(d,msg){
 document.addEventListener("click", function(e){
   if(e.target.closest(".dialogo")) return;   // o diálogo cuida dos próprios cliques
 
+  var elAbaPrincipal=e.target.closest("[data-aba-principal]");
+  if(elAbaPrincipal){ abaPrincipal=elAbaPrincipal.dataset.abaPrincipal; marcarAbaPrincipal(); return; }
+
   var elFiltro=e.target.closest("[data-filtro]");
   if(elFiltro){
     var novo=elFiltro.dataset.filtro;
     filtro = (filtro===novo && novo!=="todos") ? "todos" : novo;  // clicar de novo desmarca
     renderPainel(); renderConteudo();
+    return;
+  }
+  var elFiltroLoc=e.target.closest("[data-filtro-loc]");
+  if(elFiltroLoc){
+    var novoLoc=elFiltroLoc.dataset.filtroLoc;
+    filtroLoc = (filtroLoc===novoLoc && novoLoc!=="todos") ? "todos" : novoLoc;
+    renderPainelLoc(); renderConteudoLoc();
     return;
   }
   var elAba=e.target.closest("[data-aba]");
@@ -774,10 +1173,16 @@ document.addEventListener("click", function(e){
     var c=listaClientes.find(function(x){ return x.id===elAct.dataset.id; });
     if(c) abrirFormulario(c);
   }
+  if(elAct.dataset.act==="novo-loc") return abrirFormularioLocacao(null);
+  if(elAct.dataset.act==="abrir-loc"){
+    var l=listaLocacoes.find(function(x){ return x.id===elAct.dataset.id; });
+    if(l) abrirFormularioLocacao(l);
+  }
 });
 
 document.addEventListener("input", function(e){
   if(e.target.id==="busca"){ busca=e.target.value; renderConteudo(); }
+  if(e.target.id==="busca-loc"){ buscaLoc=e.target.value; renderConteudoLoc(); }
 });
 </script>
 </body>
