@@ -24,6 +24,7 @@
   button,input,textarea,select{font:inherit;color:inherit}
   h1,h2,h3{font-family:var(--titulo);font-weight:500;letter-spacing:-.01em;margin:0}
   .oculto{display:none !important}
+  .faixa-offline{background:#8A5A00;color:#fff;font-size:13px;padding:7px 16px;text-align:center;line-height:1.35}
   a{color:inherit}
 
   /* login */
@@ -213,12 +214,14 @@
   <span class="topo-titulo">Acompanhamento de prazos</span>
   <span class="topo-acoes"><button class="bt-escuro" id="btn-sair">Sair</button></span>
 </div>
+<div class="faixa-offline oculto" id="faixa-offline">Sem internet. Pode continuar trabalhando: o que você salvar sobe sozinho quando a conexão voltar.</div>
 <div class="quadro oculto" id="app"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
-  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
@@ -240,7 +243,11 @@ var firebaseConfig = {
   appId: "1:565072485794:web:8e8fedd419849b707266fb"
 };
 var fbApp = initializeApp(firebaseConfig);
-var db = getFirestore(fbApp);
+/* Cache local no próprio aparelho: o painel abre e salva mesmo sem internet,
+   e sobe sozinho quando a conexão voltar — mesmo mecanismo do Vistoria e do Captação. */
+var db = initializeFirestore(fbApp, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 var auth = getAuth(fbApp);
 setPersistence(auth, browserLocalPersistence).catch(function(){});
 
@@ -445,6 +452,14 @@ function fazerLogin(){
     .catch(function(){ document.getElementById("login-erro").classList.remove("oculto"); })
     .finally(function(){ b.disabled=false; b.textContent="Entrar"; });
 }
+
+function atualizarFaixaOffline(){
+  var el = document.getElementById("faixa-offline");
+  if(el) el.classList.toggle("oculto", navigator.onLine);
+}
+window.addEventListener("online", atualizarFaixaOffline);
+window.addEventListener("offline", atualizarFaixaOffline);
+atualizarFaixaOffline();
 
 onAuthStateChanged(auth, function(usuario){
   if(usuario){
